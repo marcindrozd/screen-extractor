@@ -1,6 +1,7 @@
 var AWS = require('aws-sdk');
 var fs = require('fs');
 var uuidv4 = require('uuid/v4');
+var childProcess = require("child_process");
 
 // Creating AWS client
 var s3 = new AWS.S3();
@@ -16,11 +17,31 @@ exports.handler = (event, context, callback) => {
       if (error !== null) {
         console.log('Failure:', error)
       } else {
+        var filePath = "./tmp/" + saveFolder
 
         console.log("Loaded " + data.ContentLength + " bytes");
-        fs.writeFile('./tmp/' + saveFolder + '/video.mp4', data.Body, function(error) {
+        fs.writeFile(filePath + '/video.mp4', data.Body, function(error) {
           if (error) throw error;
-          console.log('File saved!')
+          console.log('File saved!');
+
+          var framesToExtract = event.framesToExtract.map(
+            function(frame) {
+              timeframe = parseInt(frame).toString()
+              return timeframe.length === 1 ? "0" + timeframe : timeframe
+            }
+          );
+
+          framesToExtract.forEach(function(frame) {
+            console.log("ffmpeg -i " + filePath + "/video.mp4 -ss 00:00:" + frame + " -vframes 1 -f image2 -strftime 1 '" + filePath + "/image%03d.jpg'")
+            childProcess.exec("ffmpeg -i " + filePath + "/video.mp4 -ss 00:00:" + frame + " -vframes 1 -f image2 '" + filePath + "/image" + Date.now() + ".jpg'",
+              function (error, stdout, stderr) {
+                console.log('stdout: ' + stdout);
+                console.log('stderr: ' + stderr);
+                if (error !== null) {
+                     console.log('exec error: ' + error);
+                }
+              });
+          })
         })
       }
     })
