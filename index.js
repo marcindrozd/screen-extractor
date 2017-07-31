@@ -11,26 +11,30 @@ var s3 = new AWS.S3();
 exports.handler = (event, context, callback) => {
   var saveFolder = uuidv4();
   var folderPath = "./tmp/" + saveFolder;
+  var bucket = event.bucket;
+  var videoPath = event.videoPath;
+  var videoFilename = 'video.mp4';
+  var zipFilename = 'video.zip';
 
   function makeDirectory(callback) {
     fs.mkdir(folderPath, function(error) {
       if (error) throw error;
-      callback(null, saveFolder);
+      callback();
     })
   }
 
-  function getVideo(saveFolder, callback) {
+  function getVideo(callback) {
     s3.getObject({
-      Bucket: 'qkvideo-dev-videos',
-      Key: '2820/asset-b216d618-3ac0-4131-8292-3056dd1c1a7f/video.mp4'
+      Bucket: bucket,
+      Key: videoPath + '/' + videoFilename
     }, function(error, data) {
       if (error) throw error;
-      callback(null, saveFolder, data)
+      callback(null, data)
     });
   }
 
-  function saveFile(saveFolder, data, callback) {
-    fs.writeFile(folderPath + '/video.mp4', data.Body, function(error) {
+  function saveFile(data, callback) {
+    fs.writeFile(folderPath + '/' + videoFilename, data.Body, function(error) {
       if (error) throw error;
       callback()
     });
@@ -39,7 +43,7 @@ exports.handler = (event, context, callback) => {
   function prepareFramesToExtract(callback) {
     var framesToExtract = event.framesToExtract.map(
       function(frame) {
-        timeframe = parseInt(frame).toString()
+        timeframe = parseFloat(frame).toString()
         return timeframe.length === 1 ? "0" + timeframe : timeframe
       }
     );
@@ -48,14 +52,14 @@ exports.handler = (event, context, callback) => {
 
   function extractFrames(framesToExtract, callback) {
     framesToExtract.forEach(function(frame) {
-      childProcess.execSync("ffmpeg -i " + folderPath + "/video.mp4 -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
+      childProcess.execSync("ffmpeg -i " + folderPath + "/" + videoFilename + " -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
     });
 
     callback();
   }
 
   function zipFiles(callback) {
-    var output = fs.createWriteStream(folderPath + '/video.zip');
+    var output = fs.createWriteStream(folderPath + '/' + zipFilename);
     var archive = archiver('zip');
 
     output.on('close', function() {
@@ -71,7 +75,7 @@ exports.handler = (event, context, callback) => {
     archive.pipe(output);
 
     fs.readdirSync(folderPath).forEach(file => {
-      if (file === 'video.zip') { return }
+      if (file === zipFilename) { return }
       console.log('Archiving', file);
       archive.append(fs.createReadStream(folderPath + '/' + file), { name: file })
     });
@@ -80,12 +84,12 @@ exports.handler = (event, context, callback) => {
   }
 
   function uploadFile(callback) {
-    console.log('Uploading...', folderPath + '/video.zip')
-    var readStream = fs.createReadStream(folderPath + '/video.zip');
+    console.log('Uploading...', folderPath + '/' + zipFilename)
+    var readStream = fs.createReadStream(folderPath + '/' + zipFilename);
 
     s3.upload({
-      Bucket: 'qkvideo-dev-videos',
-      Key: '2820/asset-b216d618-3ac0-4131-8292-3056dd1c1a7f/video.zip',
+      Bucket: bucket,
+      Key: videoPath + '/' + zipFilename,
       ContentType: 'application/zip',
       Body: readStream,
     })
@@ -97,7 +101,7 @@ exports.handler = (event, context, callback) => {
     });
   }
 
-  function pingEndpointWithUrl(response, callback) {
+  function sendUrltoEndpoint(response, callback) {
     console.log('File url:', response.Location)
 
     callback(null)
@@ -111,7 +115,7 @@ exports.handler = (event, context, callback) => {
     extractFrames,
     zipFiles,
     uploadFile,
-    pingEndpointWithUrl,
+    sendUrltoEndpoint,
   ], function(error, result) {
     if (error) { throw error }
     console.log('Removing directory')

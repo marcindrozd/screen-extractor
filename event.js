@@ -1,8 +1,7 @@
 module.exports = function(){
   return {
-    "framesToExtract": [2, 7, 10.235],
-    "key2": "value2",
-    "key3": "value3",
-    "key4": "value4"
+    "framesToExtract": [2, 7, 10.235, 10.7179],
+    "bucket": "qkvideo-dev-videos",
+    "videoPath": "1012/asset-f57b8877-cbef-4126-a896-bf6a3ee09f36",
   };
 }
