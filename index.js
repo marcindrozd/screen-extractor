@@ -10,10 +10,10 @@ var s3 = new AWS.S3();
 
 exports.handler = (event, context, callback) => {
   var saveFolder = uuidv4();
-  var filePath = "./tmp/" + saveFolder;
+  var folderPath = "./tmp/" + saveFolder;
 
   function makeDirectory(callback) {
-    fs.mkdir('./tmp/' + saveFolder, function(error) {
+    fs.mkdir(folderPath, function(error) {
       if (error) throw error;
       callback(null, saveFolder);
     })
@@ -30,7 +30,7 @@ exports.handler = (event, context, callback) => {
   }
 
   function saveFile(saveFolder, data, callback) {
-    fs.writeFile(filePath + '/video.mp4', data.Body, function(error) {
+    fs.writeFile(folderPath + '/video.mp4', data.Body, function(error) {
       if (error) throw error;
       callback()
     });
@@ -48,14 +48,14 @@ exports.handler = (event, context, callback) => {
 
   function extractFrames(framesToExtract, callback) {
     framesToExtract.forEach(function(frame) {
-      childProcess.execSync("ffmpeg -i " + filePath + "/video.mp4 -ss 00:00:" + frame + " -vframes 1 -f image2 '" + filePath + "/image" + Date.now() + ".jpg'");
+      childProcess.execSync("ffmpeg -i " + folderPath + "/video.mp4 -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
     });
 
     callback();
   }
 
   function zipFiles(callback) {
-    var output = fs.createWriteStream(filePath + '/video.zip');
+    var output = fs.createWriteStream(folderPath + '/video.zip');
     var archive = archiver('zip');
 
     output.on('close', function() {
@@ -70,18 +70,18 @@ exports.handler = (event, context, callback) => {
 
     archive.pipe(output);
 
-    fs.readdirSync(filePath).forEach(file => {
+    fs.readdirSync(folderPath).forEach(file => {
       if (file === 'video.zip') { return }
       console.log('Archiving', file);
-      archive.append(fs.createReadStream(filePath + '/' + file), { name: file })
+      archive.append(fs.createReadStream(folderPath + '/' + file), { name: file })
     });
 
     archive.finalize()
   }
 
   function uploadFile(callback) {
-    console.log('Uploading...', filePath + '/video.zip')
-    var readStream = fs.createReadStream(filePath + '/video.zip');
+    console.log('Uploading...', folderPath + '/video.zip')
+    var readStream = fs.createReadStream(folderPath + '/video.zip');
 
     s3.upload({
       Bucket: 'qkvideo-dev-videos',
@@ -100,13 +100,7 @@ exports.handler = (event, context, callback) => {
   function pingEndpointWithUrl(response, callback) {
     console.log('File url:', response.Location)
 
-    callback(null, 'All done')
-  }
-
-
-  function check(arg, callback) {
-    console.log('Now in check!', arg);
-    callback();
+    callback(null)
   }
 
   async.waterfall([
@@ -118,11 +112,10 @@ exports.handler = (event, context, callback) => {
     zipFiles,
     uploadFile,
     pingEndpointWithUrl,
-    check
   ], function(error, result) {
     if (error) { throw error }
     console.log('Removing directory')
-    fs.removeSync(filePath)
+    fs.removeSync(folderPath)
     console.log('All done!');
   });
 
