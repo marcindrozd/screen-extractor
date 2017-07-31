@@ -10,8 +10,10 @@ var request = require('request');
 var s3 = new AWS.S3();
 
 exports.handler = (event, context, callback) => {
+  process.env['PATH'] = process.env['PATH'] + ':' + process.env['LAMBDA_TASK_ROOT']
+
   var saveFolder = uuidv4();
-  var folderPath = __dirname + "/tmp/" + saveFolder;
+  var folderPath = "/tmp/" + saveFolder;
   var bucket = event.bucket;
   var videoPath = event.videoPath;
   var frameExtractId = event.frameExtractId;
@@ -20,7 +22,6 @@ exports.handler = (event, context, callback) => {
 
   function makeDirectory(callback) {
     fs.mkdir(folderPath, function(error) {
-      // if (error) throw error;
       callback(error);
     })
   }
