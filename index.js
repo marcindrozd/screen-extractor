@@ -4,22 +4,24 @@ var uuidv4 = require('uuid/v4');
 var childProcess = require('child_process');
 var archiver = require('archiver');
 var async = require('async');
+var request = require('request');
 
 // Creating AWS client
 var s3 = new AWS.S3();
 
 exports.handler = (event, context, callback) => {
   var saveFolder = uuidv4();
-  var folderPath = "./tmp/" + saveFolder;
+  var folderPath = __dirname + "/tmp/" + saveFolder;
   var bucket = event.bucket;
   var videoPath = event.videoPath;
+  var frameExtractId = event.frameExtractId;
   var videoFilename = 'video.mp4';
   var zipFilename = 'video.zip';
 
   function makeDirectory(callback) {
     fs.mkdir(folderPath, function(error) {
-      if (error) throw error;
-      callback();
+      // if (error) throw error;
+      callback(error);
     })
   }
 
@@ -28,15 +30,13 @@ exports.handler = (event, context, callback) => {
       Bucket: bucket,
       Key: videoPath + '/' + videoFilename
     }, function(error, data) {
-      if (error) throw error;
-      callback(null, data)
+      callback(error, data)
     });
   }
 
   function saveFile(data, callback) {
     fs.writeFile(folderPath + '/' + videoFilename, data.Body, function(error) {
-      if (error) throw error;
-      callback()
+      callback(error)
     });
   }
 
@@ -51,11 +51,16 @@ exports.handler = (event, context, callback) => {
   }
 
   function extractFrames(framesToExtract, callback) {
-    framesToExtract.forEach(function(frame) {
-      childProcess.execSync("ffmpeg -i " + folderPath + "/" + videoFilename + " -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
-    });
+    try {
+      framesToExtract.forEach(function(frame) {
+        childProcess.execSync(__dirname + "/bin/ffmpeg -i " + folderPath + "/" + videoFilename + " -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
+      });
 
-    callback();
+      callback();
+    }
+    catch(err) {
+      callback(err)
+    }
   }
 
   function zipFiles(callback) {
@@ -65,11 +70,11 @@ exports.handler = (event, context, callback) => {
     output.on('close', function() {
       console.log(archive.pointer() + ' total bytes');
       console.log('archiver has been finalized and the output file descriptor has closed.');
-      callback(null);
+      callback();
     });
 
     archive.on('error', function(err) {
-      throw err;
+      callback(err)
     });
 
     archive.pipe(output);
@@ -95,16 +100,23 @@ exports.handler = (event, context, callback) => {
     })
     .send(function (error, result) {
       readStream.close();
-      if (error) { throw error }
       console.log('upload completed.');
-      callback(null, result);
+      callback(error, result);
     });
   }
 
   function sendUrltoEndpoint(response, callback) {
-    console.log('File url:', response.Location)
-
-    callback(null)
+    request.put(
+      'http://localhost:3000/api/v2/frame_extracts/' + frameExtractId + '/callback',
+      { json: { zipFileUrl: response.Location } },
+      function (error, response, body) {
+        if (!error && response.statusCode == 200) {
+          callback()
+        } else {
+          callback(error)
+        }
+      }
+    );
   }
 
   async.waterfall([
@@ -117,11 +129,12 @@ exports.handler = (event, context, callback) => {
     uploadFile,
     sendUrltoEndpoint,
   ], function(error, result) {
-    if (error) { throw error }
+    if (error) {
+      fs.removeSync(folderPath);
+      throw error
+    }
     console.log('Removing directory')
-    fs.removeSync(folderPath)
+    fs.removeSync(folderPath);
     console.log('All done!');
   });
-
-  context.succeed("Yay :)");
 }
