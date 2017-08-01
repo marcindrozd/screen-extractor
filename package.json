@@ -16,5 +16,8 @@
     "fs-extra": "^4.0.0",
     "request": "^2.81.0",
     "uuid": "^3.1.0"
+  },
+  "devDependencies": {
+    "aws-lambda-upload": "^0.1.0"
   }
 }

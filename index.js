@@ -108,7 +108,7 @@ exports.handler = (event, context, callback) => {
 
   function sendUrltoEndpoint(response, callback) {
     request.put(
-      'http://localhost:3000/api/v2/frame_extracts/' + frameExtractId + '/callback',
+      event.replyTo + '/api/v2/frame_extracts/' + frameExtractId + '/callback',
       { json: { zipFileUrl: response.Location } },
       function (error, response, body) {
         if (!error && response.statusCode == 200) {
