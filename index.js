@@ -10,13 +10,16 @@ var request = require('request');
 var s3 = new AWS.S3();
 
 exports.handler = (event, context, callback) => {
-  process.env['PATH'] = process.env['PATH'] + ':' + process.env['LAMBDA_TASK_ROOT']
+  process.env['PATH'] = process.env['PATH'] + ':' + process.env['LAMBDA_TASK_ROOT'];
 
+  console.log("Body:", event.body);
+
+  var body = event.body;
   var saveFolder = uuidv4();
   var folderPath = "/tmp/" + saveFolder;
-  var bucket = event.bucket;
-  var videoPath = event.videoPath;
-  var frameExtractId = event.frameExtractId;
+  var bucket = body.bucket;
+  var videoPath = body.videoPath;
+  var frameExtractId = body.frameExtractId;
   var videoFilename = 'video.mp4';
   var zipFilename = 'video.zip';
 
@@ -42,10 +45,22 @@ exports.handler = (event, context, callback) => {
   }
 
   function prepareFramesToExtract(callback) {
-    var framesToExtract = event.framesToExtract.map(
+    function msToTime(duration) {
+      var milliseconds = parseInt(duration % 1000)
+          , seconds = parseInt((duration / 1000) % 60)
+          , minutes = parseInt((duration / (1000 * 60)) % 60)
+          , hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+
+        hours = (hours < 10) ? "0" + hours : hours;
+        minutes = (minutes < 10) ? "0" + minutes : minutes;
+        seconds = (seconds < 10) ? "0" + seconds : seconds;
+
+        return hours + ":" + minutes + ":" + seconds + "." + milliseconds;
+    }
+
+    var framesToExtract = body.framesToExtract.map(
       function(frame) {
-        timeframe = parseFloat(frame).toString()
-        return timeframe.length === 1 ? "0" + timeframe : timeframe
+        return msToTime(frame * 1000)
       }
     );
     callback(null, framesToExtract)
@@ -54,7 +69,7 @@ exports.handler = (event, context, callback) => {
   function extractFrames(framesToExtract, callback) {
     try {
       framesToExtract.forEach(function(frame) {
-        childProcess.execSync(__dirname + "/bin/ffmpeg -i " + folderPath + "/" + videoFilename + " -ss 00:00:" + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
+        childProcess.execSync(__dirname + "/bin/ffmpeg -i " + folderPath + "/" + videoFilename + " -ss " + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
       });
 
       callback();
@@ -108,7 +123,7 @@ exports.handler = (event, context, callback) => {
 
   function sendUrltoEndpoint(response, callback) {
     request.put(
-      event.replyTo + '/api/v2/frame_extracts/' + frameExtractId + '/callback',
+      body.replyTo + '/api/v2/frame_extracts/' + frameExtractId + '/callback',
       { json: { zipFileUrl: response.Location } },
       function (error, response, body) {
         if (!error && response.statusCode == 200) {
