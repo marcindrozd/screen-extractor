@@ -12,8 +12,6 @@ var s3 = new AWS.S3();
 exports.handler = (event, context, callback) => {
   process.env['PATH'] = process.env['PATH'] + ':' + process.env['LAMBDA_TASK_ROOT'];
 
-  console.log("Body:", event.body);
-
   var body = event.body;
   var saveFolder = uuidv4();
   var folderPath = "/tmp/" + saveFolder;
@@ -69,7 +67,7 @@ exports.handler = (event, context, callback) => {
   function extractFrames(framesToExtract, callback) {
     try {
       framesToExtract.forEach(function(frame) {
-        childProcess.execSync(__dirname + "/bin/ffmpeg -i " + folderPath + "/" + videoFilename + " -ss " + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
+        childProcess.execSync("ffmpeg -i " + folderPath + "/" + videoFilename + " -ss " + frame + " -vframes 1 -f image2 '" + folderPath + "/image" + Date.now() + ".jpg'");
       });
 
       callback();
@@ -123,7 +121,7 @@ exports.handler = (event, context, callback) => {
 
   function sendUrltoEndpoint(response, callback) {
     request.put(
-      body.replyTo + '/api/v2/frame_extracts/' + frameExtractId + '/callback',
+      'https://' + body.replyTo + '/api/v2/frame_extracts/' + frameExtractId + '/callback',
       { json: { zipFileUrl: response.Location } },
       function (error, response, body) {
         if (!error && response.statusCode == 200) {
@@ -142,8 +140,6 @@ exports.handler = (event, context, callback) => {
     prepareFramesToExtract,
     extractFrames,
     zipFiles,
-    uploadFile,
-    sendUrltoEndpoint,
   ], function(error, result) {
     if (error) {
       fs.removeSync(folderPath);
